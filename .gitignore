@@ -8,6 +8,7 @@ build/
 .nuxt/
 coverage/
 *.pyc
+*.db
 .env
 .env.local
 .DS_Store
