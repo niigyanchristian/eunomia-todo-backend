@@ -1,28 +1,44 @@
 /**
  * Database connection module
- * This file will contain database connection logic
+ * SQLite database setup using better-sqlite3
  */
 
-// Example: SQLite connection template
-// const sqlite3 = require('sqlite3').verbose();
-// const db = new sqlite3.Database('./todo.db', (err) => {
-//   if (err) {
-//     console.error('Error opening database:', err.message);
-//   } else {
-//     console.log('Connected to the SQLite database.');
-//   }
-// });
+const Database = require('better-sqlite3');
+const path = require('path');
 
-// Example: Initialize database tables
-// function initDatabase() {
-//   db.run(`CREATE TABLE IF NOT EXISTS todos (
-//     id INTEGER PRIMARY KEY AUTOINCREMENT,
-//     title TEXT NOT NULL,
-//     completed BOOLEAN DEFAULT 0,
-//     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-//   )`);
-// }
+// Create database instance (auto-create todo.db file on first run)
+const dbPath = path.join(__dirname, '..', 'todo.db');
+const db = new Database(dbPath);
 
-// module.exports = { db, initDatabase };
+// Enable foreign keys for better-sqlite3
+db.pragma('foreign_keys = ON');
 
-module.exports = {};
+/**
+ * Initialize database tables
+ * Creates the todos table with the required schema
+ */
+function initDatabase() {
+  const createTableSQL = `
+    CREATE TABLE IF NOT EXISTS todos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      completed BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
+
+  try {
+    db.exec(createTableSQL);
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error.message);
+    throw error;
+  }
+}
+
+// Initialize database on module load
+initDatabase();
+
+module.exports = { db, initDatabase };
