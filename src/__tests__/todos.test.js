@@ -589,4 +589,212 @@ describe('Todos API Endpoints', () => {
       await request(app).get('/api/todos?status=invalid').expect(400);
     });
   });
+
+  describe('Concurrent Request Handling', () => {
+    test('should handle concurrent todo creation without race conditions', async () => {
+      const concurrentRequests = [];
+      const todoCount = 10;
+
+      // Create 10 concurrent POST requests
+      for (let i = 0; i < todoCount; i++) {
+        concurrentRequests.push(
+          request(app)
+            .post('/api/todos')
+            .send({ title: `Concurrent Todo ${i}`, description: `Description ${i}` })
+        );
+      }
+
+      const results = await Promise.all(concurrentRequests);
+
+      // Verify all requests succeeded
+      results.forEach(response => {
+        expect(response.status).toBe(201);
+        expect(response.body).toHaveProperty('id');
+        expect(response.body).toHaveProperty('title');
+      });
+
+      // Verify all todos were created in database
+      const listResponse = await request(app).get('/api/todos').expect(200);
+      expect(listResponse.body.length).toBe(todoCount);
+
+      // Verify all IDs are unique
+      const ids = results.map(r => r.body.id);
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(todoCount);
+    });
+
+    test('should handle concurrent updates to different todos', async () => {
+      // Create 5 todos first
+      const createRequests = [];
+      for (let i = 0; i < 5; i++) {
+        createRequests.push(
+          request(app).post('/api/todos').send({ title: `Todo ${i}` })
+        );
+      }
+
+      const createdTodos = await Promise.all(createRequests);
+      const todoIds = createdTodos.map(r => r.body.id);
+
+      // Concurrently update all todos
+      const updateRequests = todoIds.map((id, index) =>
+        request(app)
+          .put(`/api/todos/${id}`)
+          .send({ title: `Updated Todo ${index}`, completed: index % 2 === 0 })
+      );
+
+      const updateResults = await Promise.all(updateRequests);
+
+      // Verify all updates succeeded
+      updateResults.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('id');
+      });
+
+      // Verify updates were applied
+      const getResponse = await request(app).get('/api/todos').expect(200);
+      expect(getResponse.body.length).toBe(5);
+      expect(getResponse.body.some(t => t.title.startsWith('Updated'))).toBe(true);
+    });
+
+    test('should handle rapid GET requests maintaining data consistency', async () => {
+      // Create a todo
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Consistency Test Todo', description: 'Testing rapid reads' });
+
+      const todoId = createResponse.body.id;
+
+      // Perform 20 concurrent GET requests for the same todo
+      const getRequests = [];
+      for (let i = 0; i < 20; i++) {
+        getRequests.push(request(app).get(`/api/todos/${todoId}`));
+      }
+
+      const results = await Promise.all(getRequests);
+
+      // Verify all requests returned the same data
+      const firstResult = results[0].body;
+      results.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body.id).toBe(firstResult.id);
+        expect(response.body.title).toBe(firstResult.title);
+        expect(response.body.description).toBe(firstResult.description);
+      });
+    });
+
+    test('should handle concurrent delete and read operations safely', async () => {
+      // Create a todo
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Todo to Delete in Race' });
+
+      const todoId = createResponse.body.id;
+
+      // Start: 1 delete request and multiple read requests concurrently
+      const raceRequests = [
+        request(app).delete(`/api/todos/${todoId}`)
+      ];
+
+      // Add 5 concurrent get requests that may race with the delete
+      for (let i = 0; i < 5; i++) {
+        raceRequests.push(
+          request(app).get(`/api/todos/${todoId}`)
+        );
+      }
+
+      const results = await Promise.all(raceRequests);
+
+      // First result should be the delete (204)
+      expect(results[0].status).toBe(204);
+
+      // Subsequent requests should all return 404 since todo was deleted
+      results.slice(1).forEach(response => {
+        expect(response.status).toBe(404);
+        expect(response.body).toHaveProperty('error');
+      });
+    });
+
+    test('should handle mixed concurrent operations (CREATE, READ, UPDATE, DELETE)', async () => {
+      // Create initial todos
+      const todo1Response = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Todo 1' });
+
+      const todo2Response = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Todo 2' });
+
+      const todo1Id = todo1Response.body.id;
+      const todo2Id = todo2Response.body.id;
+
+      // Perform mixed concurrent operations
+      const mixedOps = [
+        // Create 5 new todos
+        ...Array(5).fill(null).map((_, i) =>
+          request(app).post('/api/todos').send({ title: `New Todo ${i}` })
+        ),
+        // Read all todos
+        request(app).get('/api/todos'),
+        // Update todo 1
+        request(app).put(`/api/todos/${todo1Id}`).send({ title: 'Updated Todo 1' }),
+        // Delete todo 2
+        request(app).delete(`/api/todos/${todo2Id}`),
+        // Read specific todo
+        request(app).get(`/api/todos/${todo1Id}`)
+      ];
+
+      const results = await Promise.all(mixedOps);
+
+      // Verify creates succeeded (201)
+      results.slice(0, 5).forEach(response => {
+        expect(response.status).toBe(201);
+      });
+
+      // Verify read all succeeded (200)
+      expect(results[5].status).toBe(200);
+      expect(Array.isArray(results[5].body)).toBe(true);
+
+      // Verify update succeeded (200)
+      expect(results[6].status).toBe(200);
+      expect(results[6].body.title).toBe('Updated Todo 1');
+
+      // Verify delete succeeded (204)
+      expect(results[7].status).toBe(204);
+
+      // Verify read specific succeeded (200)
+      expect(results[8].status).toBe(200);
+      expect(results[8].body.id).toBe(todo1Id);
+
+      // Final state: should have 6 todos (initial 2 + 5 new, minus 1 deleted)
+      const finalList = await request(app).get('/api/todos').expect(200);
+      expect(finalList.body.length).toBe(6);
+    });
+
+    test('should handle concurrent requests with special characters in data', async () => {
+      const specialCharTests = [
+        { title: 'Unicode: 你好世界 🌍', description: 'Testing emoji and Chinese' },
+        { title: 'Special chars: !@#$%^&*()', description: 'Testing special chars' },
+        { title: 'Line breaks:\nMulti\nLine', description: 'Testing\nmultiline' },
+        { title: 'Quotes: "double" and \'single\'', description: 'Testing quotes' },
+        { title: 'HTML-like: <div>test</div>', description: 'Testing HTML-like content' }
+      ];
+
+      const requests = specialCharTests.map(data =>
+        request(app).post('/api/todos').send(data)
+      );
+
+      const results = await Promise.all(requests);
+
+      // Verify all creations succeeded
+      results.forEach((response, index) => {
+        expect(response.status).toBe(201);
+        expect(response.body.title).toBe(specialCharTests[index].title);
+        expect(response.body.description).toBe(specialCharTests[index].description);
+      });
+
+      // Verify data integrity by retrieving
+      const listResponse = await request(app).get('/api/todos').expect(200);
+      expect(listResponse.body.length).toBeGreaterThanOrEqual(5);
+    });
+  });
 });
