@@ -10,6 +10,9 @@ const path = require('path');
 // Test database path
 const testDbPath = path.join(__dirname, '..', '..', 'todo.db');
 
+let app;
+let db;
+
 // Clean up and reset database before tests
 beforeAll(() => {
   // Remove database file if it exists
@@ -20,11 +23,16 @@ beforeAll(() => {
       // Ignore if file is locked
     }
   }
-});
 
-// Import app after cleaning database
-const app = require('../index');
-const { db } = require('../db');
+  // Clear module cache to force fresh database connection
+  delete require.cache[require.resolve('../db')];
+  delete require.cache[require.resolve('../index')];
+
+  // Import app after cleaning database
+  app = require('../index');
+  const dbModule = require('../db');
+  db = dbModule.db;
+});
 
 // Clean up database after each test
 afterEach(() => {
