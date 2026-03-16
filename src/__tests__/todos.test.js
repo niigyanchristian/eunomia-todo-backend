@@ -213,7 +213,7 @@ describe('Todos API Endpoints', () => {
     });
 
     test('should return both active and completed todos when no status filter is provided', async () => {
-      const todo1 = await request(app).post('/api/todos').send({ title: 'Active Todo' });
+      await request(app).post('/api/todos').send({ title: 'Active Todo' });
       const todo2 = await request(app).post('/api/todos').send({ title: 'Completed Todo' });
 
       await request(app)
@@ -557,6 +557,25 @@ describe('Todos API Endpoints', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toBe('Invalid todo ID');
+    });
+
+    test('should return 404 when deleting the same todo twice', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Todo to Delete Twice' });
+
+      const todoId = createResponse.body.id;
+
+      await request(app)
+        .delete(`/api/todos/${todoId}`)
+        .expect(204);
+
+      const response = await request(app)
+        .delete(`/api/todos/${todoId}`)
+        .expect(404);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Todo not found');
     });
 
     test('should not affect other todos when deleting one', async () => {
