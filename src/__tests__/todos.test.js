@@ -252,6 +252,19 @@ describe('Todos API Endpoints', () => {
       expect(response.body.length).toBe(1);
       expect(typeof response.body[0].completed).toBe('boolean');
     });
+
+    test('should return description field in list response', async () => {
+      await request(app)
+        .post('/api/todos')
+        .send({ title: 'Todo With Description', description: 'A detailed description' });
+
+      const response = await request(app)
+        .get('/api/todos')
+        .expect(200);
+
+      expect(response.body.length).toBe(1);
+      expect(response.body[0].description).toBe('A detailed description');
+    });
   });
 
   describe('GET /api/todos/:id', () => {
