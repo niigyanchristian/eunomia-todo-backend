@@ -24,9 +24,11 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/todos', todosRouter);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Start server only when run directly, not when required for testing
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
 module.exports = app;
