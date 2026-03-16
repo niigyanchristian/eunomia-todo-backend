@@ -8,7 +8,10 @@ const path = require('path');
 
 // Create database instance (auto-create todo.db file on first run)
 const dbPath = path.join(__dirname, '..', 'todo.db');
-let _db = new Database(dbPath);
+const db = new Database(dbPath, { readonly: false, timeout: 5000 });
+
+// Enable foreign keys for better-sqlite3
+db.pragma('foreign_keys = ON');
 
 /**
  * Initialize database tables on a given connection

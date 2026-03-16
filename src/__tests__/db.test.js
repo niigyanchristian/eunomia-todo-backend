@@ -18,6 +18,9 @@ describe('Database Module', () => {
         // Ignore if file is locked
       }
     }
+
+    // Clear module cache to force fresh database connection
+    delete require.cache[require.resolve('../db')];
   });
 
   // Clean up after all tests
