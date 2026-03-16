@@ -314,6 +314,19 @@ describe('Todos API Endpoints', () => {
 
       expect(typeof response.body.completed).toBe('boolean');
     });
+
+    test('should include created_at and updated_at timestamp fields as strings', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Timestamp Test Todo' });
+
+      const response = await request(app)
+        .get(`/api/todos/${createResponse.body.id}`)
+        .expect(200);
+
+      expect(typeof response.body.created_at).toBe('string');
+      expect(typeof response.body.updated_at).toBe('string');
+    });
   });
 
   describe('PUT /api/todos/:id', () => {
