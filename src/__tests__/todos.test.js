@@ -612,6 +612,21 @@ describe('Todos API Endpoints', () => {
       expect(response.body.error).toBe('Todo not found');
     });
 
+    test('should remove the deleted todo from the list response', async () => {
+      const todo1 = await request(app).post('/api/todos').send({ title: 'Keep Me' });
+      const todo2 = await request(app).post('/api/todos').send({ title: 'Delete Me' });
+
+      const beforeDelete = await request(app).get('/api/todos').expect(200);
+      const countBefore = beforeDelete.body.length;
+
+      await request(app).delete(`/api/todos/${todo2.body.id}`).expect(204);
+
+      const afterDelete = await request(app).get('/api/todos').expect(200);
+      expect(afterDelete.body.length).toBe(countBefore - 1);
+      expect(afterDelete.body.find(t => t.id === todo2.body.id)).toBeUndefined();
+      expect(afterDelete.body.find(t => t.id === todo1.body.id)).toBeDefined();
+    });
+
     test('should not affect other todos when deleting one', async () => {
       const todo1 = await request(app).post('/api/todos').send({ title: 'Todo 1' });
       const todo2 = await request(app).post('/api/todos').send({ title: 'Todo 2' });
