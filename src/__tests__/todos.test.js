@@ -220,6 +220,27 @@ describe('Todos API Endpoints', () => {
       expect(response.body.every(todo => todo.completed === true)).toBe(true);
     });
 
+    test('should return both active and completed todos when no status filter is provided', async () => {
+      await request(app).post('/api/todos').send({ title: 'Active Todo' });
+      const todo2 = await request(app).post('/api/todos').send({ title: 'Completed Todo' });
+
+      await request(app)
+        .put(`/api/todos/${todo2.body.id}`)
+        .send({ completed: true });
+
+      const response = await request(app)
+        .get('/api/todos')
+        .expect(200);
+
+      expect(response.body.length).toBe(2);
+      const titles = response.body.map(t => t.title);
+      expect(titles).toContain('Active Todo');
+      expect(titles).toContain('Completed Todo');
+      const completedValues = response.body.map(t => t.completed);
+      expect(completedValues).toContain(true);
+      expect(completedValues).toContain(false);
+    });
+
     test('should return 400 for invalid status parameter', async () => {
       const response = await request(app)
         .get('/api/todos?status=invalid')
@@ -471,6 +492,28 @@ describe('Todos API Endpoints', () => {
       expect(response2.body.completed).toBe(false);
     });
 
+    test('should toggle a completed todo back to incomplete', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Test Todo' });
+
+      const todoId = createResponse.body.id;
+
+      // Mark as completed
+      await request(app)
+        .put(`/api/todos/${todoId}`)
+        .send({ completed: true })
+        .expect(200);
+
+      // Toggle back to incomplete
+      const response = await request(app)
+        .put(`/api/todos/${todoId}`)
+        .send({ completed: false })
+        .expect(200);
+
+      expect(response.body.completed).toBe(false);
+    });
+
     test('should return 400 if no valid fields to update', async () => {
       const createResponse = await request(app)
         .post('/api/todos')
@@ -522,6 +565,25 @@ describe('Todos API Endpoints', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toBe('Invalid todo ID');
+    });
+
+    test('should return 404 when deleting the same todo twice', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ title: 'Todo to Delete Twice' });
+
+      const todoId = createResponse.body.id;
+
+      await request(app)
+        .delete(`/api/todos/${todoId}`)
+        .expect(204);
+
+      const response = await request(app)
+        .delete(`/api/todos/${todoId}`)
+        .expect(404);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Todo not found');
     });
 
     test('should not affect other todos when deleting one', async () => {
