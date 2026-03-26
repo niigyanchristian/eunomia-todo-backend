@@ -18,6 +18,9 @@
 - Verify commands succeed before proceeding. Check exit codes.
 - Do not run interactive commands that require user input.
 - Do not run destructive commands (rm -rf, drop tables) without explicit instruction.
+- **NEVER** use `pkill`, `killall`, `kill $(lsof ...)`, or `fuser -k` to stop servers or processes.
+  These kill ALL matching processes system-wide, including other services on this machine.
+  Only stop a process by terminating the specific task/PID you started.
 
 ## Git
 - Do not create commits unless explicitly asked.
